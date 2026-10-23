@@ -49,7 +49,7 @@ export function bandaSonoraWav(escenas) {
   const fundido = 1.5 * FRECUENCIA;
   for (let s = Math.max(0, n - fundido); s < n; s++) pista[s] *= (n - s) / fundido;
   const pico = pista.reduce((m, v) => Math.max(m, Math.abs(v)), 0) || 1;
-  const ganancia = Math.min(1, 0.7 / pico);
+  const ganancia = 0.7 / pico;
 
   // WAV mono de 16 bits
   const wav = Buffer.alloc(44 + n * 2);

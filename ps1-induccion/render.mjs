@@ -75,7 +75,7 @@ if ('fotos' in opciones) {
       '-f', 'image2pipe', '-framerate', String(FPS), '-c:v', 'png', '-i', '-',
       '-i', audio,
       '-vf', 'scale=iw*2:ih*2:flags=neighbor',
-      '-c:v', 'libx264', '-preset', 'slow', '-crf', '20', '-pix_fmt', 'yuv420p',
+      '-c:v', 'libx264', '-preset', 'slow', '-crf', '24', '-tune', 'animation', '-pix_fmt', 'yuv420p',
       '-c:a', 'aac', '-b:a', '128k', '-shortest',
       '-movflags', '+faststart',
       salida,
