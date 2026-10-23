@@ -10,19 +10,26 @@ function aleatorio(semilla) {
   };
 }
 
-// Texturas diminutas, sin filtrado ni mipmaps, como en la PS1
+// PS1: texturas diminutas, con ruido y sin filtrado ni mipmaps.
+// Cel: el mismo dibujo a más resolución, limpio y suavizado.
+let config = { escala: 1, ruido: true, suave: false };
+export function configurarTexturas(opciones) {
+  config = { ...config, ...opciones };
+}
+
 function texturaCanvas(w, h, semilla, dibujar) {
   const canvas = document.createElement('canvas');
-  canvas.width = w;
-  canvas.height = h;
+  canvas.width = w * config.escala;
+  canvas.height = h * config.escala;
   const ctx = canvas.getContext('2d');
+  ctx.scale(config.escala, config.escala);
   dibujar(ctx, aleatorio(semilla), w, h);
 
   const tex = new THREE.CanvasTexture(canvas);
   tex.colorSpace = THREE.SRGBColorSpace;
-  tex.magFilter = THREE.NearestFilter;
-  tex.minFilter = THREE.NearestFilter;
-  tex.generateMipmaps = false;
+  tex.magFilter = config.suave ? THREE.LinearFilter : THREE.NearestFilter;
+  tex.minFilter = config.suave ? THREE.LinearMipmapLinearFilter : THREE.NearestFilter;
+  tex.generateMipmaps = config.suave;
   tex.wrapS = THREE.RepeatWrapping;
   tex.wrapT = THREE.RepeatWrapping;
   return tex;
@@ -30,6 +37,7 @@ function texturaCanvas(w, h, semilla, dibujar) {
 
 // Salpica cada píxel con un poco de ruido para que no quede plano
 function ruido(ctx, w, h, rnd, fuerza) {
+  if (!config.ruido) return;
   const img = ctx.getImageData(0, 0, w, h);
   for (let i = 0; i < img.data.length; i += 4) {
     const n = (rnd() - 0.5) * fuerza;

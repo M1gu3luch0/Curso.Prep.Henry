@@ -30,12 +30,11 @@ export const ESCENAS = [
       Object.assign(mundo.estado, { hervor: 0.5, vapor: 0.8 });
       orbita(camara, [-0.3, 0.2, 0], 3, 1.5, 0.55 - local * 0.08);
     },
-    hud({ hud, local }) {
-      hud.texto('¿CÓMO FUNCIONA', HUD_X / 2, 92, { tam: 34, color: 'oro', grosor: 2, alinear: 'center' });
-      hud.texto('UN FOGÓN DE INDUCCIÓN?', HUD_X / 2, 134, { tam: 34, color: 'oro', grosor: 2, alinear: 'center' });
-      hud.texto('DEMO EDUCATIVA · ESTILO PS1', HUD_X / 2, 190, { tam: 14, alinear: 'center' });
-      if (local > 1.2 && Math.floor(local * 2) % 2 === 0) {
-        hud.texto('PULSA START', HUD_X / 2, 400, { tam: 20, alinear: 'center', grosor: 2 });
+    hud({ hud, local, estilo }) {
+      hud.titulo(['¿CÓMO FUNCIONA', 'UN FOGÓN DE INDUCCIÓN?'], local);
+      hud.texto(`DEMO EDUCATIVA · ${estilo.nombre}`, HUD_X / 2, 190, { tam: 14, alinear: 'center', contorno: true });
+      if (estilo.id === 'ps1' && local > 1.2 && Math.floor(local * 2) % 2 === 0) {
+        hud.texto('PULSA START', HUD_X / 2, 400, { tam: 20, alinear: 'center', grosor: 2, contorno: true });
       }
     },
   },
@@ -154,7 +153,7 @@ export const ESCENAS = [
       hud.termometro('OLLA', 20, 500, 20);
       hud.termometro('VIDRIO', 20, 568, 20);
       if (local > 2.5 && Math.floor(local * 2.5) % 2 === 0) {
-        hud.texto('¡NO SE CALIENTA!', 250, 135, { tam: 24, color: '#ff4a3a', grosor: 2, alinear: 'center' });
+        hud.texto('¡NO SE CALIENTA!', 250, 135, { tam: 24, color: 'alerta', grosor: 2, alinear: 'center', contorno: true });
       }
     },
   },
@@ -181,11 +180,11 @@ export const ESCENAS = [
         if (local < 0.6 + i * 0.9) return;
         const x = 21 + i * 154;
         hud.ventana(x, 22, 136, 46);
-        hud.texto(l1, x + 68, 27, { tam: 13, alinear: 'center', color: '#ffe14a', borde: '#0a0c30' });
-        hud.texto(l2, x + 68, 46, { tam: 13, alinear: 'center', borde: '#0a0c30' });
+        hud.texto(l1, x + 68, 27, { tam: 13, alinear: 'center', color: 'acento' });
+        hud.texto(l2, x + 68, 46, { tam: 13, alinear: 'center' });
         if (i > 0) hud.flecha(x - 16, 45);
       });
-      if (local > dur - 3) hud.texto('FIN', HUD_X / 2, 160, { tam: 56, color: 'oro', grosor: 3, alinear: 'center' });
+      if (local > dur - 3) hud.texto('FIN', HUD_X / 2, 160, { tam: 56, color: 'titulo', grosor: 3, alinear: 'center', contorno: true });
     },
   },
 ];

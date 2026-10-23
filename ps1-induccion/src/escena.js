@@ -1,8 +1,5 @@
 import * as THREE from 'three';
-import { psxMaterial } from './psx.js';
 import * as tex from './texturas.js';
-
-export const FONDO = 0x1a1c2c;
 
 // Centro del fogón grande (la olla y la bobina están aquí)
 export const CENTRO = new THREE.Vector3(-0.45, 0, 0.05);
@@ -20,7 +17,8 @@ const enHueco = (x, z, margen) => Math.abs(Math.atan2(x, z)) < Math.PI / 4 + mar
 // Perfiles (radio, altura) que se tornean para formar la olla y el agua
 const PERFIL_BASE = [[0, 0], [0.58, 0], [0.62, 0.035], [0.62, 0.06], [0, 0.06]];
 const PERFIL_PARED = [[0.62, 0.06], [0.62, 0.55], [0.6, 0.575], [0.58, 0.55], [0.58, 0.06]];
-const PERFIL_AGUA = [[0, 0.06], [0.58, 0.06], [0.58, 0.45], [0, 0.45]];
+// El agua empieza un pelo por encima del fondo: si coinciden, parpadean (z-fighting)
+const PERFIL_AGUA = [[0, 0.063], [0.58, 0.063], [0.58, 0.45], [0, 0.45]];
 
 // Líneas de campo: lazos alrededor del hilo de la bobina, en varios planos verticales
 const ANGULOS_CAMPO = [-0.62, 0, 0.62, Math.PI / 2, (3 * Math.PI) / 4, Math.PI, (5 * Math.PI) / 4, (3 * Math.PI) / 2];
@@ -29,6 +27,7 @@ const PUNTOS_LAZO = 48;
 const FLECHAS_POR_LAZO = 4;
 
 const RADIOS_FOUCAULT = [0.16, 0.32, 0.48];
+const PUNTOS_ARCO = 36;
 const FLECHAS_BOBINA = 80;
 const BURBUJAS = 60;
 const VAPORES = 14;
@@ -38,10 +37,17 @@ const COLOR_CAMPO_A = new THREE.Color(0x5ce0ff);
 const COLOR_CAMPO_B = new THREE.Color(0xff5cc8);
 const COLOR_FOUCAULT = new THREE.Color(0xff8a2a);
 
-const GEO_FLECHA = new THREE.ConeGeometry(0.025, 0.07, 3);
+// Estilo activo (material, nivel de detalle, tipo de líneas): lo fija crearMundo()
+let estilo;
+const mat = (opciones) => estilo.material(opciones);
+const seg = (n) => Math.round(n * estilo.detalle);
+// En PS1, bolas facetadas; en cel, esferas lisas para que solo se dibuje la silueta
+const bola = (r) => (estilo.detalle > 1 ? new THREE.SphereGeometry(r, 16, 12) : new THREE.IcosahedronGeometry(r, 0));
+// En PS1 las flechas se apagan cuando la corriente baja; en cel conservan su color
+const intensidad = (k) => (estilo.coloresVivos ? 0.85 + 0.15 * k : k);
 
-function malla(geo, mat, x = 0, y = 0, z = 0) {
-  const m = new THREE.Mesh(geo, mat);
+function malla(geo, material, x = 0, y = 0, z = 0) {
+  const m = new THREE.Mesh(geo, material);
   m.position.set(x, y, z);
   return m;
 }
@@ -68,17 +74,19 @@ class Espiral extends THREE.Curve {
   }
 }
 
-function flechas(mat, cantidad) {
-  const inst = new THREE.InstancedMesh(GEO_FLECHA, mat, cantidad);
-  inst.frustumCulled = false;
-  for (let i = 0; i < cantidad; i++) inst.setColorAt(i, COLOR_CORRIENTE);
-  return inst;
-}
-
 const _m = new THREE.Matrix4();
 const _q = new THREE.Quaternion();
 const _s = new THREE.Vector3();
 const _arriba = new THREE.Vector3(0, 1, 0);
+const _medio = new THREE.Vector3();
+const _tramo = new THREE.Vector3();
+
+function flechas(geo, material, cantidad) {
+  const inst = new THREE.InstancedMesh(geo, material, cantidad);
+  inst.frustumCulled = false;
+  for (let i = 0; i < cantidad; i++) inst.setColorAt(i, COLOR_CORRIENTE);
+  return inst;
+}
 
 function colocar(inst, i, pos, dir, escala, color) {
   _q.setFromUnitVectors(_arriba, dir);
@@ -88,30 +96,101 @@ function colocar(inst, i, pos, dir, escala, color) {
   if (color) inst.setColorAt(i, color);
 }
 
+// Líneas que se redibujan en cada fotograma: de 1 píxel en PS1 o tubos gruesos en cel
+function crearTrazos(grupo, maxSegmentos, renderOrder = 0) {
+  let i = 0;
+  if (!estilo.lineasGruesas) {
+    const material = new THREE.LineBasicMaterial({ transparent: true, depthWrite: false });
+    const lineas = [];
+    return {
+      empezar(color, intensidad) {
+        material.color.copy(color);
+        material.opacity = intensidad;
+        i = 0;
+      },
+      linea(puntos, cerrada) {
+        if (!lineas[i]) {
+          const geo = new THREE.BufferGeometry();
+          geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(puntos.length * 3), 3));
+          const linea = cerrada ? new THREE.LineLoop(geo, material) : new THREE.Line(geo, material);
+          linea.frustumCulled = false;
+          linea.renderOrder = renderOrder;
+          grupo.add(linea);
+          lineas.push(linea);
+        }
+        const pos = lineas[i++].geometry.attributes.position;
+        puntos.forEach((p, j) => pos.setXYZ(j, p.x, p.y, p.z));
+        pos.needsUpdate = true;
+      },
+      terminar() {},
+    };
+  }
+
+  const tubos = new THREE.InstancedMesh(
+    new THREE.CylinderGeometry(1, 1, 1, 6, 1, true),
+    mat({ lit: false, transparent: true }),
+    maxSegmentos,
+  );
+  tubos.frustumCulled = false;
+  tubos.renderOrder = renderOrder;
+  tubos.userData.sinContorno = true;
+  tubos.setColorAt(0, COLOR_CAMPO_A);
+  grupo.add(tubos);
+  const color = new THREE.Color();
+  let radio = 0;
+  const segmento = (a, b) => {
+    _medio.addVectors(a, b).multiplyScalar(0.5);
+    _tramo.subVectors(b, a);
+    const largo = _tramo.length();
+    if (largo < 1e-6) return;
+    _q.setFromUnitVectors(_arriba, _tramo.divideScalar(largo));
+    _m.compose(_medio, _q, _s.set(radio, largo, radio));
+    tubos.setMatrixAt(i, _m);
+    tubos.setColorAt(i++, color);
+  };
+  return {
+    empezar(c, intensidad) {
+      color.copy(c);
+      radio = 0.0065 * Math.sqrt(intensidad);
+      i = 0;
+    },
+    linea(puntos, cerrada) {
+      for (let j = 1; j < puntos.length; j++) segmento(puntos[j - 1], puntos[j]);
+      if (cerrada) segmento(puntos[puntos.length - 1], puntos[0]);
+    },
+    terminar() {
+      _m.makeScale(0, 0, 0);
+      for (let j = i; j < maxSegmentos; j++) tubos.setMatrixAt(j, _m);
+      tubos.instanceMatrix.needsUpdate = true;
+      tubos.instanceColor.needsUpdate = true;
+    },
+  };
+}
+
 function crearCocina(scene) {
-  const suelo = malla(repetirUV(new THREE.PlaneGeometry(12, 12, 6, 6), 6, 6), psxMaterial({ map: tex.suelo() }), 0, -0.9, 0);
+  const suelo = malla(repetirUV(new THREE.PlaneGeometry(12, 12, 6, 6), 6, 6), mat({ map: tex.suelo() }), 0, -0.9, 0);
   suelo.rotation.x = -Math.PI / 2;
   scene.add(suelo);
 
   // Muchas subdivisiones: así la deformación del mapeo afín no dobla tanto la pared
-  scene.add(malla(repetirUV(new THREE.PlaneGeometry(10, 5, 24, 12), 10, 5), psxMaterial({ map: tex.azulejos() }), 0, 1.6, -1.2));
+  scene.add(malla(repetirUV(new THREE.PlaneGeometry(10, 5, 24, 12), 10, 5), mat({ map: tex.azulejos() }), 0, 1.6, -1.2));
 
   // Muebles bajos: dejan hueco para la caja de la placa
-  scene.add(malla(repetirUV(new THREE.BoxGeometry(5.2, 0.55, 2.1, 4, 1, 1), 4, 1), psxMaterial({ map: tex.mueble() }), 0, -0.625, -0.15));
-  scene.add(malla(new THREE.BoxGeometry(5.2, 0.29, 0.04), psxMaterial({ color: 0xcfc8b6 }), 0, -0.205, 0.88));
+  scene.add(malla(repetirUV(new THREE.BoxGeometry(5.2, 0.55, 2.1, 4, 1, 1), 4, 1), mat({ map: tex.mueble() }), 0, -0.625, -0.15));
+  scene.add(malla(new THREE.BoxGeometry(5.2, 0.29, 0.04), mat({ color: 0xcfc8b6 }), 0, -0.205, 0.88));
 
   // Encimera de madera con el hueco de la placa (x de -1.1 a 1.1, z de -0.7 a 0.7)
-  const matMadera = psxMaterial({ map: tex.madera() });
+  const matMadera = mat({ map: tex.madera() });
   for (const [x, z, w, d] of [[-1.85, -0.125, 1.5, 2.15], [1.85, -0.125, 1.5, 2.15], [0, -0.95, 2.2, 0.5], [0, 0.825, 2.2, 0.25]]) {
     scene.add(malla(repetirUV(new THREE.BoxGeometry(w, 0.06, d, 2, 1, 2), w, d), matMadera, x, -0.03, z));
   }
 
   // Decorado: una planta y un bote de utensilios
-  scene.add(malla(new THREE.CylinderGeometry(0.12, 0.09, 0.2, 6), psxMaterial({ color: 0xb8643a }), 1.9, 0.1, -0.75));
-  scene.add(malla(new THREE.IcosahedronGeometry(0.22, 0), psxMaterial({ color: 0x3f9a3a }), 1.9, 0.38, -0.75));
-  scene.add(malla(new THREE.IcosahedronGeometry(0.14, 0), psxMaterial({ color: 0x56b84a }), 2.05, 0.52, -0.68));
-  scene.add(malla(new THREE.CylinderGeometry(0.09, 0.09, 0.24, 6), psxMaterial({ color: 0x4a6ab8 }), -1.8, 0.12, -0.8));
-  const matCuchara = psxMaterial({ color: 0xc8955a });
+  scene.add(malla(new THREE.CylinderGeometry(0.12, 0.09, 0.2, seg(6)), mat({ color: 0xb8643a }), 1.9, 0.1, -0.75));
+  scene.add(malla(bola(0.22), mat({ color: 0x3f9a3a }), 1.9, 0.38, -0.75));
+  scene.add(malla(bola(0.14), mat({ color: 0x56b84a }), 2.05, 0.52, -0.68));
+  scene.add(malla(new THREE.CylinderGeometry(0.09, 0.09, 0.24, seg(6)), mat({ color: 0x4a6ab8 }), -1.8, 0.12, -0.8));
+  const matCuchara = mat({ color: 0xc8955a });
   for (const [dx, inc] of [[-0.03, -0.2], [0.02, 0.1], [0.04, 0.28]]) {
     const palo = malla(new THREE.BoxGeometry(0.025, 0.45, 0.025), matCuchara, -1.8 + dx, 0.3, -0.8);
     palo.rotation.z = inc;
@@ -121,10 +200,10 @@ function crearCocina(scene) {
 
 function crearPlaca(scene) {
   // Caja interior de la placa: BackSide para ver solo las paredes de dentro
-  scene.add(malla(new THREE.BoxGeometry(2.2, 0.3, 1.4), psxMaterial({ color: 0x3a3a42, side: THREE.BackSide }), 0, -0.15, 0));
+  scene.add(malla(new THREE.BoxGeometry(2.2, 0.3, 1.4), mat({ color: 0x3a3a42, side: THREE.BackSide }), 0, -0.15, 0));
 
   // Ferritas: barras que dirigen el campo hacia arriba
-  const matFerrita = psxMaterial({ color: 0x4a4850 });
+  const matFerrita = mat({ color: 0x4a4850 });
   for (let i = 0; i < 8; i++) {
     const a = (i / 8) * Math.PI * 2;
     const f = malla(new THREE.BoxGeometry(0.4, 0.025, 0.05), matFerrita, CENTRO.x + Math.cos(a) * 0.34, -0.085, CENTRO.z + Math.sin(a) * 0.34);
@@ -133,25 +212,25 @@ function crearPlaca(scene) {
   }
 
   // Bobinas de cobre en espiral
-  const matCobre = psxMaterial({ map: tex.cobre() });
+  const matCobre = mat({ map: tex.cobre(), brillo: 1 });
   const espiral = new Espiral(0.12, 0.55, 7);
-  scene.add(malla(new THREE.TubeGeometry(espiral, 160, 0.022, 4, false), matCobre, CENTRO.x, -0.04, CENTRO.z));
-  scene.add(malla(new THREE.TubeGeometry(new Espiral(0.07, 0.28, 4), 80, 0.02, 4, false), matCobre, 0.65, -0.04, -0.2));
+  scene.add(malla(new THREE.TubeGeometry(espiral, seg(160), 0.022, seg(4), false), matCobre, CENTRO.x, -0.04, CENTRO.z));
+  scene.add(malla(new THREE.TubeGeometry(new Espiral(0.07, 0.28, 4), seg(80), 0.02, seg(4), false), matCobre, 0.65, -0.04, -0.2));
 
   // Electrónica (inversor que genera la corriente de alta frecuencia)
-  scene.add(malla(new THREE.BoxGeometry(0.75, 0.03, 1.1), psxMaterial({ map: tex.placa() }), 0.62, -0.27, 0.05));
-  const matChip = psxMaterial({ color: 0x202024 });
+  scene.add(malla(new THREE.BoxGeometry(0.75, 0.03, 1.1), mat({ map: tex.placa() }), 0.62, -0.27, 0.05));
+  const matChip = mat({ color: 0x202024 });
   scene.add(malla(new THREE.BoxGeometry(0.12, 0.025, 0.12), matChip, 0.45, -0.243, 0.35));
   scene.add(malla(new THREE.BoxGeometry(0.12, 0.025, 0.12), matChip, 0.62, -0.243, 0.35));
-  const matCondensador = psxMaterial({ color: 0x2a3a8a });
-  scene.add(malla(new THREE.CylinderGeometry(0.05, 0.05, 0.12, 6), matCondensador, 0.86, -0.195, 0.3));
-  scene.add(malla(new THREE.CylinderGeometry(0.05, 0.05, 0.12, 6), matCondensador, 0.86, -0.195, 0.45));
-  scene.add(malla(new THREE.BoxGeometry(0.3, 0.08, 0.12), psxMaterial({ color: 0x9aa0a8 }), 0.55, -0.215, -0.15));
-  const toroide = malla(new THREE.TorusGeometry(0.05, 0.02, 4, 8), matCobre, 0.8, -0.235, -0.3);
+  const matCondensador = mat({ color: 0x2a3a8a });
+  scene.add(malla(new THREE.CylinderGeometry(0.05, 0.05, 0.12, seg(6)), matCondensador, 0.86, -0.195, 0.3));
+  scene.add(malla(new THREE.CylinderGeometry(0.05, 0.05, 0.12, seg(6)), matCondensador, 0.86, -0.195, 0.45));
+  scene.add(malla(new THREE.BoxGeometry(0.3, 0.08, 0.12), mat({ color: 0x9aa0a8 }), 0.55, -0.215, -0.15));
+  const toroide = malla(new THREE.TorusGeometry(0.05, 0.02, seg(4), seg(8)), matCobre, 0.8, -0.235, -0.3);
   toroide.rotation.x = Math.PI / 2;
   scene.add(toroide);
 
-  const matVidrio = psxMaterial({ map: tex.vitro(), transparent: true });
+  const matVidrio = mat({ map: tex.vitro(), transparent: true, brillo: 1 });
   const vidrio = malla(new THREE.BoxGeometry(2.2, 0.03, 1.4), matVidrio, 0, 0.015, 0);
   scene.add(vidrio);
 
@@ -162,19 +241,19 @@ function crearOlla(cortada, mats) {
   const grupo = new THREE.Group();
   const ini = cortada ? CORTE_INI : 0;
   const len = cortada ? CORTE_LEN : Math.PI * 2;
-  const segmentos = cortada ? 9 : 12;
+  const segmentos = seg(cortada ? 9 : 12);
   const torno = (perfil) => new THREE.LatheGeometry(perfil.map(([x, y]) => new THREE.Vector2(x, y)), segmentos, ini, len);
 
   grupo.add(new THREE.Mesh(torno(PERFIL_BASE), mats.base));
   grupo.add(new THREE.Mesh(torno(PERFIL_PARED), mats.pared));
-  grupo.add(malla(new THREE.CylinderGeometry(0.58, 0.58, 0.39, segmentos, 1, false, ini, len), mats.agua, 0, 0.255, 0));
+  grupo.add(malla(new THREE.CylinderGeometry(0.58, 0.58, 0.387, segmentos, 1, false, ini, len), mats.agua, 0, 0.2565, 0));
 
   // Caras del corte, como en un dibujo técnico
   if (cortada) {
     for (const phi of [ini, ini + len]) {
-      for (const [perfil, mat] of [[PERFIL_BASE, mats.corteBase], [PERFIL_PARED, mats.cortePared], [PERFIL_AGUA, mats.corteAgua]]) {
+      for (const [perfil, material] of [[PERFIL_BASE, mats.corteBase], [PERFIL_PARED, mats.cortePared], [PERFIL_AGUA, mats.corteAgua]]) {
         const forma = new THREE.Shape(perfil.map(([x, y]) => new THREE.Vector2(x, y)));
-        const tapa = new THREE.Mesh(new THREE.ShapeGeometry(forma), mat);
+        const tapa = new THREE.Mesh(new THREE.ShapeGeometry(forma), material);
         tapa.rotation.y = phi - Math.PI / 2;
         grupo.add(tapa);
       }
@@ -186,10 +265,11 @@ function crearOlla(cortada, mats) {
   return grupo;
 }
 
-export function crearMundo() {
+export function crearMundo(estiloElegido) {
+  estilo = estiloElegido;
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(FONDO);
-  scene.fog = new THREE.Fog(FONDO, 5, 14);
+  scene.background = new THREE.Color(estilo.fondo);
+  scene.fog = new THREE.Fog(estilo.fondo, 5, 14);
 
   crearCocina(scene);
   const { vidrio, matVidrio, espiral } = crearPlaca(scene);
@@ -197,19 +277,19 @@ export function crearMundo() {
   const texAcero = tex.acero();
   const texAgua = tex.agua();
   const doble = THREE.DoubleSide;
-  const matAgua = psxMaterial({ map: texAgua, opacity: 0.45, side: doble });
-  const matCorteAgua = psxMaterial({ map: texAgua, lit: false, opacity: 0.45, side: doble });
+  const matAgua = mat({ map: texAgua, opacity: 0.45, side: doble });
+  const matCorteAgua = mat({ map: texAgua, lit: false, opacity: 0.45, side: doble });
   const acero = {
-    base: psxMaterial({ map: texAcero, side: doble }),
-    pared: psxMaterial({ map: texAcero, side: doble }),
-    corteBase: psxMaterial({ color: 0xd4d8de, lit: false, side: doble }),
-    cortePared: psxMaterial({ color: 0xd4d8de, lit: false, side: doble }),
+    base: mat({ map: texAcero, side: doble, brillo: 1 }),
+    pared: mat({ map: texAcero, side: doble, brillo: 1 }),
+    corteBase: mat({ color: 0xd4d8de, lit: false, side: doble }),
+    cortePared: mat({ color: 0xd4d8de, lit: false, side: doble }),
     agua: matAgua,
     corteAgua: matCorteAgua,
-    asas: psxMaterial({ color: 0x26262a }),
+    asas: mat({ color: 0x26262a }),
   };
-  const matCristal = psxMaterial({ color: 0xbfe6ee, opacity: 0.35, side: doble });
-  const matCorteCristal = psxMaterial({ color: 0xd8f4f8, lit: false, opacity: 0.5, side: doble });
+  const matCristal = mat({ color: 0xbfe6ee, opacity: 0.35, side: doble, brillo: 1 });
+  const matCorteCristal = mat({ color: 0xd8f4f8, lit: false, opacity: 0.5, side: doble });
   const cristal = {
     base: matCristal,
     pared: matCristal,
@@ -226,57 +306,53 @@ export function crearMundo() {
     vidrio: crearOlla(true, cristal),
   };
   Object.values(ollas).forEach((o) => scene.add(o));
+  // La olla de vidrio es transparente, pero se le dibuja el contorno igualmente (estilo cel)
+  ollas.vidrio.traverse((o) => (o.userData.contornoSiempre = !o.material?.map));
 
-  const matFlecha = psxMaterial({ lit: false });
+  const geoFlecha = new THREE.ConeGeometry(0.025, 0.07, seg(3));
+  const matFlecha = mat({ lit: false });
 
   // Corriente en la bobina
-  const flechasBobina = flechas(matFlecha, FLECHAS_BOBINA);
+  const flechasBobina = flechas(geoFlecha, matFlecha, FLECHAS_BOBINA);
   scene.add(flechasBobina);
 
   // Campo magnético
   const grupoCampo = new THREE.Group();
   grupoCampo.position.copy(CENTRO);
   scene.add(grupoCampo);
-  const matLineaCampo = new THREE.LineBasicMaterial({ color: COLOR_CAMPO_A, transparent: true, depthWrite: false });
   const lazos = [];
   for (const phi of ANGULOS_CAMPO) {
-    for (const [ar, ay] of TAMANOS_LAZO) {
-      const geo = new THREE.BufferGeometry();
-      geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(PUNTOS_LAZO * 3), 3));
-      const linea = new THREE.LineLoop(geo, matLineaCampo);
-      linea.frustumCulled = false;
-      grupoCampo.add(linea);
-      lazos.push({ phi, ar, ay, geo });
-    }
+    for (const [ar, ay] of TAMANOS_LAZO) lazos.push({ phi, ar, ay });
   }
-  const flechasCampo = flechas(matFlecha, lazos.length * FLECHAS_POR_LAZO);
+  const trazosCampo = crearTrazos(grupoCampo, lazos.length * PUNTOS_LAZO);
+  const puntosLazo = Array.from({ length: PUNTOS_LAZO }, () => new THREE.Vector3());
+  const flechasCampo = flechas(geoFlecha, matFlecha, lazos.length * FLECHAS_POR_LAZO);
   grupoCampo.add(flechasCampo);
 
-  // Corrientes de Foucault en el fondo de la olla (solo en la parte no cortada)
+  // Corrientes de Foucault en el fondo de la olla (solo en la parte no cortada).
+  // Transparentes y con renderOrder alto: se dibujan después del agua y no quedan tapadas
   const grupoFoucault = new THREE.Group();
   grupoFoucault.position.set(CENTRO.x, 0.03 + 0.065, CENTRO.z);
   scene.add(grupoFoucault);
-  const matLineaFoucault = new THREE.LineBasicMaterial({ color: COLOR_FOUCAULT, transparent: true, depthWrite: false });
-  for (const r of RADIOS_FOUCAULT) {
-    const puntos = [];
-    for (let i = 0; i <= 36; i++) {
-      const phi = CORTE_INI + (CORTE_LEN * i) / 36;
-      puntos.push(new THREE.Vector3(r * Math.sin(phi), 0, r * Math.cos(phi)));
-    }
-    grupoFoucault.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(puntos), matLineaFoucault));
-  }
-  // Transparentes y con renderOrder alto: se dibujan después del agua y no quedan tapadas
-  const flechasFoucault = flechas(psxMaterial({ lit: false, transparent: true }), RADIOS_FOUCAULT.reduce((n, r) => n + Math.round(r * 40), 0));
+  const trazosFoucault = crearTrazos(grupoFoucault, RADIOS_FOUCAULT.length * PUNTOS_ARCO, 10);
+  const arcos = RADIOS_FOUCAULT.map((r) =>
+    Array.from({ length: PUNTOS_ARCO + 1 }, (_, i) => {
+      const phi = CORTE_INI + (CORTE_LEN * i) / PUNTOS_ARCO;
+      return new THREE.Vector3(r * Math.sin(phi), 0, r * Math.cos(phi));
+    }),
+  );
+  const flechasFoucault = flechas(geoFlecha, mat({ lit: false, transparent: true }), RADIOS_FOUCAULT.reduce((n, r) => n + Math.round(r * 40), 0));
+  flechasFoucault.renderOrder = 10;
   grupoFoucault.add(flechasFoucault);
-  grupoFoucault.children.forEach((hijo) => (hijo.renderOrder = 10));
 
-  // Burbujas y vapor
-  const burbujas = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 0), psxMaterial({ color: 0xd8f0ff }), BURBUJAS);
+  // Burbujas y vapor (en cel, el vapor son nubecitas redondas en vez de cuadrados)
+  const burbujas = new THREE.InstancedMesh(bola(1), mat({ color: 0xd8f0ff, brillo: 1 }), BURBUJAS);
   burbujas.frustumCulled = false;
   scene.add(burbujas);
+  const vaporRedondo = estilo.detalle > 1;
   const vapor = new THREE.InstancedMesh(
-    new THREE.PlaneGeometry(1, 1),
-    psxMaterial({ color: 0xffffff, lit: false, opacity: 0.22, side: doble }),
+    vaporRedondo ? bola(0.3) : new THREE.PlaneGeometry(1, 1),
+    vaporRedondo ? mat({ color: 0xffffff }) : mat({ color: 0xffffff, lit: false, opacity: 0.22, side: doble }),
     VAPORES,
   );
   vapor.frustumCulled = false;
@@ -341,8 +417,8 @@ export function crearMundo() {
       espiral.getPointAt(u, _p).add(CENTRO);
       _p.y = -0.012;
       espiral.getTangentAt(u, _dir).multiplyScalar(signo);
-      _c.copy(COLOR_CORRIENTE).multiplyScalar(0.35 + 0.65 * Math.abs(I));
-      colocar(flechasBobina, i, _p, _dir, e.corriente, _c);
+      _c.copy(COLOR_CORRIENTE).multiplyScalar(intensidad(0.35 + 0.65 * Math.abs(I)));
+      colocar(flechasBobina, i, _p, _dir, e.corriente * estilo.flecha, _c);
     }
     flechasBobina.instanceMatrix.needsUpdate = true;
     flechasBobina.instanceColor.needsUpdate = true;
@@ -350,32 +426,30 @@ export function crearMundo() {
     // Campo magnético: cambia de sentido (y de color) con la corriente
     const colorCampo = signo > 0 ? COLOR_CAMPO_A : COLOR_CAMPO_B;
     grupoCampo.visible = e.campo > 0;
-    matLineaCampo.color.copy(colorCampo);
-    matLineaCampo.opacity = e.campo * (0.25 + 0.6 * Math.abs(I));
+    trazosCampo.empezar(colorCampo, e.campo * (0.25 + 0.6 * Math.abs(I)));
     let n = 0;
     for (const lazo of lazos) {
-      const pos = lazo.geo.attributes.position;
-      for (let i = 0; i < PUNTOS_LAZO; i++) {
-        puntoLazo(lazo, (i / PUNTOS_LAZO) * Math.PI * 2, _p);
-        pos.setXYZ(i, _p.x, _p.y, _p.z);
-      }
-      pos.needsUpdate = true;
+      puntosLazo.forEach((p, i) => puntoLazo(lazo, (i / PUNTOS_LAZO) * Math.PI * 2, p));
+      trazosCampo.linea(puntosLazo, true);
       for (let k = 0; k < FLECHAS_POR_LAZO; k++) {
         const th = (k / FLECHAS_POR_LAZO) * Math.PI * 2 + 0.6 * avance;
         puntoLazo(lazo, th, _p);
         puntoLazo(lazo, th + 0.05, _p2);
         _dir.subVectors(_p2, _p).normalize().multiplyScalar(signo);
-        _c.copy(colorCampo).multiplyScalar(0.4 + 0.6 * Math.abs(I));
-        colocar(flechasCampo, n++, _p, _dir, e.campo * 0.9, _c);
+        _c.copy(colorCampo).multiplyScalar(intensidad(0.4 + 0.6 * Math.abs(I)));
+        colocar(flechasCampo, n++, _p, _dir, e.campo * 0.9 * estilo.flecha, _c);
       }
     }
+    trazosCampo.terminar();
     flechasCampo.instanceMatrix.needsUpdate = true;
     flechasCampo.instanceColor.needsUpdate = true;
 
     // Corrientes de Foucault: siguen a la variación del campo (desfasadas 90°)
     const variacion = -Math.cos(OMEGA * t);
     grupoFoucault.visible = e.foucault > 0;
-    matLineaFoucault.opacity = e.foucault * (0.3 + 0.6 * Math.abs(variacion));
+    trazosFoucault.empezar(COLOR_FOUCAULT, e.foucault * (0.3 + 0.6 * Math.abs(variacion)));
+    arcos.forEach((arco) => trazosFoucault.linea(arco, false));
+    trazosFoucault.terminar();
     n = 0;
     for (const r of RADIOS_FOUCAULT) {
       const cantidad = Math.round(r * 40);
@@ -383,9 +457,9 @@ export function crearMundo() {
         const a = (k / cantidad) * Math.PI * 2 - 0.5 * Math.sin(OMEGA * t);
         _p.set(r * Math.cos(a), 0, r * Math.sin(a));
         _dir.set(-Math.sin(a), 0, Math.cos(a)).multiplyScalar(variacion >= 0 ? 1 : -1);
-        _c.copy(COLOR_FOUCAULT).multiplyScalar(0.45 + 0.55 * Math.abs(variacion));
+        _c.copy(COLOR_FOUCAULT).multiplyScalar(intensidad(0.45 + 0.55 * Math.abs(variacion)));
         const visible = enHueco(_p.x, _p.z, 0.15) ? 0 : e.foucault;
-        colocar(flechasFoucault, n++, _p, _dir, visible, _c);
+        colocar(flechasFoucault, n++, _p, _dir, visible * estilo.flecha, _c);
       }
     }
     flechasFoucault.instanceMatrix.needsUpdate = true;
@@ -411,7 +485,7 @@ export function crearMundo() {
     }
     burbujas.instanceMatrix.needsUpdate = true;
 
-    // Vapor: cuadrados que siempre miran a la cámara
+    // Vapor: sube desde el agua, crece y se deshace
     for (let i = 0; i < VAPORES; i++) {
       const f = (t * 0.22 + i / VAPORES) % 1;
       const ang = i * 2.4;

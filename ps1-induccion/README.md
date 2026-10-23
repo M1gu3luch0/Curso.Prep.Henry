@@ -1,14 +1,19 @@
-# ¿Cómo funciona un fogón de inducción? — demo estilo PS1
+# ¿Cómo funciona un fogón de inducción? — demo en dos estilos
 
-Vídeo educativo de unos 84 segundos hecho con **Three.js** y un shader que imita a la PlayStation 1. Todo se genera con código: los modelos, las texturas, la animación y la música.
+Vídeo educativo de unos 84 segundos hecho con **Three.js**, en dos estilos visuales: **PS1** y **cel-shading**. Todo se genera con código: los modelos, las texturas, la animación y la música. Los dos vídeos comparten escena, guion y cámara; solo cambia la "capa de estilo".
 
-**Vídeo:** [`fogon-induccion-ps1.mp4`](./fogon-induccion-ps1.mp4) (1280×960, 30 fps, con sonido)
+| Estilo | Vídeo |
+|---|---|
+| PlayStation 1 | [`fogon-induccion-ps1.mp4`](./fogon-induccion-ps1.mp4) |
+| Cel-shading (dibujo animado) | [`fogon-induccion-cel.mp4`](./fogon-induccion-cel.mp4) |
+
+Los dos son de 1280×960, a 30 fps y con sonido.
 
 ## Qué cuenta el vídeo
 
 | # | Escena | Qué se ve |
 |---|---|---|
-| 0 | Título | La cocina, con el título y "PULSA START" |
+| 0 | Título | La cocina, con el título (en PS1, con "PULSA START") |
 | 1 | Por fuera | Una placa de vidrio lisa, sin llama ni resistencias |
 | 2 | Despiece | Se levantan la olla y el vidrio: aparecen la bobina de cobre y la electrónica |
 | 3 | Corriente | Flechas amarillas recorren la bobina y cambian de sentido (corriente alterna) |
@@ -35,6 +40,18 @@ Todo está en [`src/psx.js`](./src/psx.js):
 6. **Color de 15 bits con tramado:** 32 niveles por canal y una matriz de Bayer 4×4.
 7. **Niebla** a poca distancia, pocos polígonos y una interfaz de ventanas azules al estilo de los RPG de la época.
 
+## Cómo se consigue el cel-shading
+
+Está en [`src/cel.js`](./src/cel.js):
+
+1. **Luz en tres tonos:** en lugar de un degradado hay tres franjas de color fijas, y las sombras tiran a azul.
+2. **Brillo "recortado":** los metales y el agua tienen una mancha de brillo blanca de bordes duros.
+3. **Contornos de tinta:** se dibuja la escena una segunda vez guardando la profundidad y la orientación (normal) de cada píxel. Donde cambian de golpe entre píxeles vecinos se pinta una línea oscura. Los objetos transparentes y las líneas de campo no llevan contorno.
+4. **Más detalle:** cilindros, tubos y olla con el triple de segmentos, texturas limpias a 4× de resolución y suavizadas, y antialiasing.
+5. **Elementos de dibujo animado:** líneas de campo gruesas, vapor en forma de nubecitas, bocadillos blancos con sombra de tinta y transiciones de cierre en círculo.
+
+Lo que cambia entre estilos está reunido en [`src/estilos.js`](./src/estilos.js).
+
 ## Verlo en el navegador (en tiempo real)
 
 Los módulos ES no funcionan abriendo el archivo con doble clic; hace falta un servidor:
@@ -44,9 +61,9 @@ cd ps1-induccion
 npx serve .
 ```
 
-Abre la dirección que te indique. three.js se carga desde un CDN. Haz clic en la imagen para volver a empezar; con `?t=40` en la URL empieza en el segundo 40.
+Abre la dirección que te indique: por defecto se ve en PS1, y con `?estilo=cel` en la URL se ve en cel-shading. three.js se carga desde un CDN. Haz clic en la imagen para volver a empezar; con `?t=40` en la URL empieza en el segundo 40.
 
-## Volver a generar el vídeo
+## Volver a generar los vídeos
 
 Necesitas Node 18+, ffmpeg y Chromium para Playwright (`npx playwright install chromium` si no lo tienes).
 
@@ -54,7 +71,8 @@ Necesitas Node 18+, ffmpeg y Chromium para Playwright (`npx playwright install c
 cd ps1-induccion
 npm install
 npm run render        # crea fogon-induccion-ps1.mp4
-npm run fotos         # solo algunos fotogramas sueltos, en ./capturas
+npm run render:cel    # crea fogon-induccion-cel.mp4
+npm run fotos         # solo algunos fotogramas sueltos, en ./capturas (fotos:cel para el otro estilo)
 ```
 
 [`render.mjs`](./render.mjs) abre la página en Chromium sin ventana y pide cada fotograma con su tiempo exacto. Así el vídeo sale fluido aunque el ordenador sea lento. Los fotogramas se pasan a ffmpeg junto con la banda sonora, que se sintetiza en [`sonido.mjs`](./sonido.mjs).
@@ -63,11 +81,13 @@ npm run fotos         # solo algunos fotogramas sueltos, en ./capturas
 
 ```
 index.html        página que muestra la demo
+src/estilos.js    lo que cambia entre PS1 y cel-shading
 src/psx.js        material con los efectos de PS1
-src/texturas.js   texturas pixeladas generadas por código
+src/cel.js        material cel-shading y contornos de tinta
+src/texturas.js   texturas generadas por código
 src/escena.js     cocina, placa, bobina, olla, campo y partículas
 src/guion.js      escenas: cámara, textos y qué se ve en cada momento
-src/hud.js        textos, ventanas, termómetros y osciloscopio
+src/hud.js        textos, ventanas, termómetros y osciloscopio (dos temas)
 src/main.js       une todo; modo tiempo real o modo captura
 render.mjs        exporta el vídeo (Playwright + ffmpeg)
 sonido.mjs        música y pitidos sintetizados

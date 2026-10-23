@@ -1,6 +1,7 @@
 // Renderiza la demo fotograma a fotograma en Chromium (sin ventana) y la pasa a vídeo con ffmpeg.
 //
 //   node render.mjs                       -> fogon-induccion-ps1.mp4
+//   node render.mjs --estilo=cel          -> fogon-induccion-cel.mp4
 //   node render.mjs --salida=otro.mp4
 //   node render.mjs --fotos=3,12.5,40     -> PNG sueltos de esos segundos (en ./capturas)
 import { chromium } from 'playwright';
@@ -24,6 +25,7 @@ const opciones = Object.fromEntries(
     return [clave, valor];
   }),
 );
+const estilo = opciones.estilo || 'ps1';
 
 const navegador = await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
 const pagina = await navegador.newPage();
@@ -42,7 +44,7 @@ await pagina.route(`${ORIGEN}/**`, async (ruta) => {
   ruta.fulfill({ body: await readFile(archivo), contentType: TIPOS[path.extname(archivo)] ?? 'application/octet-stream' });
 });
 
-await pagina.goto(`${ORIGEN}/index.html?captura`);
+await pagina.goto(`${ORIGEN}/index.html?captura&estilo=${estilo}`);
 await pagina.waitForFunction(() => window.DEMO?.listo, null, { timeout: 30000 });
 
 const capturar = async (t) => {
@@ -54,27 +56,28 @@ if ('fotos' in opciones) {
   const carpeta = path.join(RAIZ, 'capturas');
   await mkdir(carpeta, { recursive: true });
   for (const s of opciones.fotos.split(',').map(Number)) {
-    const archivo = path.join(carpeta, `t${String(s).replace('.', '_')}.png`);
+    const archivo = path.join(carpeta, `${estilo}-t${String(s).replace('.', '_')}.png`);
     await writeFile(archivo, await capturar(s));
     console.log(archivo);
   }
 } else {
-  const salida = path.resolve(RAIZ, opciones.salida || 'fogon-induccion-ps1.mp4');
-  const duracion = await pagina.evaluate(() => window.DEMO.duracion);
+  const salida = path.resolve(RAIZ, opciones.salida || `fogon-induccion-${estilo}.mp4`);
+  const { duracion, ancho } = await pagina.evaluate(() => ({ duracion: window.DEMO.duracion, ancho: window.DEMO.ancho }));
   const total = Math.round(duracion * FPS);
 
   const temporal = await mkdtemp(path.join(os.tmpdir(), 'induccion-'));
   const audio = path.join(temporal, 'banda-sonora.wav');
   await writeFile(audio, bandaSonoraWav(ESCENAS));
 
-  // 640x480 -> 1280x960 duplicando píxeles (sin suavizar)
+  // PS1: 640x480 -> 1280x960 duplicando píxeles (sin suavizar). Cel: ya sale a 1280x960
+  const escalar = ancho < 1280 ? ['-vf', `scale=iw*${1280 / ancho}:ih*${1280 / ancho}:flags=neighbor`] : [];
   const ffmpeg = spawn(
     'ffmpeg',
     [
       '-y', '-loglevel', 'error',
       '-f', 'image2pipe', '-framerate', String(FPS), '-c:v', 'png', '-i', '-',
       '-i', audio,
-      '-vf', 'scale=iw*2:ih*2:flags=neighbor',
+      ...escalar,
       '-c:v', 'libx264', '-preset', 'slow', '-crf', '24', '-tune', 'animation', '-pix_fmt', 'yuv420p',
       '-c:a', 'aac', '-b:a', '128k', '-shortest',
       '-movflags', '+faststart',

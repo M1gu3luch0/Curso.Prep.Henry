@@ -1,10 +1,12 @@
 {
   "name": "ps1-induccion",
   "version": "1.0.0",
-  "description": "Demo en vídeo de un fogón de inducción con estética de PlayStation 1 (Three.js)",
+  "description": "Vídeo educativo de un fogón de inducción en estilo PS1 y cel-shading (Three.js)",
   "scripts": {
     "render": "node render.mjs",
-    "fotos": "node render.mjs --fotos=3,10,18,26,36,46,55,64,76"
+    "render:cel": "node render.mjs --estilo=cel",
+    "fotos": "node render.mjs --fotos=3,10,18,26,36,46,55,64,76",
+    "fotos:cel": "node render.mjs --estilo=cel --fotos=3,10,18,26,36,46,55,64,76"
   },
   "license": "ISC",
   "dependencies": {
