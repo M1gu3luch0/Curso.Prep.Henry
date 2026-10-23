@@ -1,13 +1,14 @@
-# ¿Cómo funciona un fogón de inducción? — demo en dos estilos
+# ¿Cómo funciona un fogón de inducción? — demo en tres estilos
 
-Vídeo educativo de unos 84 segundos hecho con **Three.js**, en dos estilos visuales: **PS1** y **cel-shading**. Todo se genera con código: los modelos, las texturas, la animación y la música. Los dos vídeos comparten escena, guion y cámara; solo cambia la "capa de estilo".
+Vídeo educativo de unos 84 segundos hecho con **Three.js**, en tres estilos visuales: **PS1**, **cel-shading** e **infografía isométrica**. Todo se genera con código: los modelos, las texturas, la animación y la música. Los tres vídeos comparten escena y guion; solo cambia la "capa de estilo".
 
 | Estilo | Vídeo |
 |---|---|
 | PlayStation 1 | [`fogon-induccion-ps1.mp4`](./fogon-induccion-ps1.mp4) |
 | Cel-shading (dibujo animado) | [`fogon-induccion-cel.mp4`](./fogon-induccion-cel.mp4) |
+| Infografía isométrica | [`fogon-induccion-iso.mp4`](./fogon-induccion-iso.mp4) |
 
-Los dos son de 1280×960, a 30 fps y con sonido.
+Los tres son de 1280×960, a 30 fps y con sonido.
 
 ## Qué cuenta el vídeo
 
@@ -50,6 +51,16 @@ Está en [`src/cel.js`](./src/cel.js):
 4. **Más detalle:** cilindros, tubos y olla con el triple de segmentos, texturas limpias a 4× de resolución y suavizadas, y antialiasing.
 5. **Elementos de dibujo animado:** líneas de campo gruesas, vapor en forma de nubecitas, bocadillos blancos con sombra de tinta y transiciones de cierre en círculo.
 
+## Cómo se consigue la infografía isométrica
+
+Está en [`src/iso.js`](./src/iso.js) y en la cámara de [`src/main.js`](./src/main.js):
+
+1. **Cámara isométrica:** ortográfica (sin perspectiva), mirando desde la diagonal (1, 1, 1): 45° de giro y 35,26° de elevación. Cada escena del guion indica qué punto encuadrar y con cuánto zoom.
+2. **Colores planos en facetas:** cada cara se pinta de un solo color según hacia dónde mira (arriba claro, frente medio, lateral oscuro). Las texturas se sustituyen por colores pastel lisos, salvo la vitrocerámica y la placa electrónica.
+3. **Diorama:** sin pared ni suelo; la encimera flota sobre una peana y un fondo liso.
+4. **Contornos muy suaves** y la olla cortada mirando hacia la cámara isométrica.
+5. **Tarjetas de infografía:** blancas con sombra difusa, número y título de cada paso, y fundidos suaves al color de fondo.
+
 Lo que cambia entre estilos está reunido en [`src/estilos.js`](./src/estilos.js).
 
 ## Verlo en el navegador (en tiempo real)
@@ -61,7 +72,7 @@ cd ps1-induccion
 npx serve .
 ```
 
-Abre la dirección que te indique: por defecto se ve en PS1, y con `?estilo=cel` en la URL se ve en cel-shading. three.js se carga desde un CDN. Haz clic en la imagen para volver a empezar; con `?t=40` en la URL empieza en el segundo 40.
+Abre la dirección que te indique: por defecto se ve en PS1; con `?estilo=cel` en la URL, en cel-shading, y con `?estilo=iso`, en infografía isométrica. three.js se carga desde un CDN. Haz clic en la imagen para volver a empezar; con `?t=40` en la URL empieza en el segundo 40.
 
 ## Volver a generar los vídeos
 
@@ -72,7 +83,8 @@ cd ps1-induccion
 npm install
 npm run render        # crea fogon-induccion-ps1.mp4
 npm run render:cel    # crea fogon-induccion-cel.mp4
-npm run fotos         # solo algunos fotogramas sueltos, en ./capturas (fotos:cel para el otro estilo)
+npm run render:iso    # crea fogon-induccion-iso.mp4
+npm run fotos         # solo algunos fotogramas sueltos, en ./capturas (fotos:cel y fotos:iso para los otros estilos)
 ```
 
 [`render.mjs`](./render.mjs) abre la página en Chromium sin ventana y pide cada fotograma con su tiempo exacto. Así el vídeo sale fluido aunque el ordenador sea lento. Los fotogramas se pasan a ffmpeg junto con la banda sonora, que se sintetiza en [`sonido.mjs`](./sonido.mjs).
@@ -81,13 +93,14 @@ npm run fotos         # solo algunos fotogramas sueltos, en ./capturas (fotos:ce
 
 ```
 index.html        página que muestra la demo
-src/estilos.js    lo que cambia entre PS1 y cel-shading
+src/estilos.js    lo que cambia entre PS1, cel-shading e isométrica
 src/psx.js        material con los efectos de PS1
 src/cel.js        material cel-shading y contornos de tinta
+src/iso.js        material de colores planos en facetas (infografía)
 src/texturas.js   texturas generadas por código
 src/escena.js     cocina, placa, bobina, olla, campo y partículas
 src/guion.js      escenas: cámara, textos y qué se ve en cada momento
-src/hud.js        textos, ventanas, termómetros y osciloscopio (dos temas)
+src/hud.js        textos, ventanas, termómetros y osciloscopio (tres temas)
 src/main.js       une todo; modo tiempo real o modo captura
 render.mjs        exporta el vídeo (Playwright + ffmpeg)
 sonido.mjs        música y pitidos sintetizados

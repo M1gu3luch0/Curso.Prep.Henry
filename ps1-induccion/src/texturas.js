@@ -17,7 +17,8 @@ export function configurarTexturas(opciones) {
   config = { ...config, ...opciones };
 }
 
-function texturaCanvas(w, h, semilla, dibujar) {
+// plano: color liso que usa el estilo isométrico en lugar de la textura
+function texturaCanvas(w, h, semilla, dibujar, plano) {
   const canvas = document.createElement('canvas');
   canvas.width = w * config.escala;
   canvas.height = h * config.escala;
@@ -32,6 +33,7 @@ function texturaCanvas(w, h, semilla, dibujar) {
   tex.generateMipmaps = config.suave;
   tex.wrapS = THREE.RepeatWrapping;
   tex.wrapT = THREE.RepeatWrapping;
+  if (plano) tex.userData.plano = plano;
   return tex;
 }
 
@@ -64,7 +66,7 @@ export const madera = () =>
       ctx.fillRect(0, y + 15, w, 1);
     }
     ruido(ctx, w, h, rnd, 16);
-  });
+  }, '#e9b872');
 
 export const azulejos = () =>
   texturaCanvas(64, 64, 2, (ctx, rnd, w, h) => {
@@ -80,7 +82,7 @@ export const azulejos = () =>
       }
     }
     ruido(ctx, w, h, rnd, 10);
-  });
+  }, '#dfeee9');
 
 export const suelo = () =>
   texturaCanvas(64, 64, 3, (ctx, rnd, w, h) => {
@@ -92,7 +94,7 @@ export const suelo = () =>
       }
     }
     ruido(ctx, w, h, rnd, 22);
-  });
+  }, '#e8c4a0');
 
 export const mueble = () =>
   texturaCanvas(64, 64, 4, (ctx, rnd, w, h) => {
@@ -107,7 +109,7 @@ export const mueble = () =>
     ctx.fillStyle = rgb(70, 70, 76);
     ctx.fillRect(w / 2 - 8, 12, 16, 3);
     ruido(ctx, w, h, rnd, 8);
-  });
+  }, '#f6f1e7');
 
 // Vitrocerámica: negra, con los aros de los fogones y los mandos táctiles
 export const vitro = () =>
@@ -157,7 +159,7 @@ export const acero = () =>
     ctx.fillStyle = 'rgba(255, 255, 255, 0.25)';
     ctx.fillRect(0, 10, w, 4);
     ruido(ctx, w, h, rnd, 10);
-  });
+  }, '#cfd8e3');
 
 // El tubo de la bobina mapea "v" alrededor del hilo: franjas a lo largo del cobre
 export const cobre = () =>
@@ -168,7 +170,7 @@ export const cobre = () =>
       ctx.fillRect(0, i * 4, w, 4);
     });
     ruido(ctx, w, h, rnd, 14);
-  });
+  }, '#e98a4f');
 
 export const agua = () =>
   texturaCanvas(32, 32, 8, (ctx, rnd, w, h) => {
@@ -177,7 +179,7 @@ export const agua = () =>
     ctx.fillStyle = rgb(110, 175, 230);
     for (let i = 0; i < 10; i++) ctx.fillRect((rnd() * w) | 0, (rnd() * h) | 0, 3 + ((rnd() * 5) | 0), 1);
     ruido(ctx, w, h, rnd, 10);
-  });
+  }, '#8ecae6');
 
 export const placa = () =>
   texturaCanvas(64, 64, 9, (ctx, rnd, w, h) => {

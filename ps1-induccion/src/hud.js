@@ -1,5 +1,5 @@
 // Capa 2D de textos y ventanas. Se dibuja siempre en coordenadas de 640x480;
-// en estilo cel el lienzo es el doble de grande y se escala.
+// en los estilos cel e iso el lienzo es el doble de grande y se escala.
 export const HUD_X = 640;
 export const HUD_Y = 480;
 
@@ -21,14 +21,18 @@ const TEMAS = {
     borde: '#0a0c30', // contorno del texto dentro de las ventanas
     bordeLibre: '#000000', // contorno del texto sobre la escena
     linea: '#ffffff',
+    grosorLinea: 2,
     punto: '#ffe14a',
     eje: '#5a64a8',
     tubo: '#10142a',
     frio: '#4ab0ff',
     tibio: '#ffa030',
     caliente: '#ff4a2a',
+    ventana: 'rpg',
+    fundido: { tipo: 'escalones', color: '#000000' },
+    entradaTitulo: 'fija',
   },
-  // Cel: fuente gruesa con antialiasing y bocadillos blancos con trazo de tinta
+  // Cel: fuente gruesa y bocadillos blancos con trazo y sombra de tinta
   cel: {
     pixel: false,
     fuente: 'Inter, "DejaVu Sans", sans-serif',
@@ -41,23 +45,53 @@ const TEMAS = {
     borde: null,
     bordeLibre: '#1d1d2b',
     linea: '#1d1d2b',
+    grosorLinea: 3,
     punto: '#ff922b',
     eje: '#ced4da',
     tubo: '#e9ecef',
     frio: '#4dabf7',
     tibio: '#ffa94d',
     caliente: '#f03e3e',
+    ventana: { fondo: '#fffaf0', radio: 12, borde: '#1d1d2b', grosorBorde: 3, sombra: { color: '#1d1d2b', x: 4, y: 5, desenfoque: 0 } },
+    fundido: { tipo: 'iris', color: '#1d1d2b' },
+    entradaTitulo: 'rebote',
+  },
+  // Infografía: tarjetas blancas con sombra suave, colores planos y número de paso
+  iso: {
+    pixel: false,
+    fuente: 'Inter, "DejaVu Sans", sans-serif',
+    peso: '700',
+    texto: '#073b4c',
+    textoLibre: '#073b4c',
+    acento: '#118ab2',
+    alerta: '#ef476f',
+    titulo: ['#073b4c', '#0b5d7a', '#118ab2'],
+    borde: null,
+    bordeLibre: '#ffffff',
+    linea: '#073b4c',
+    grosorLinea: 1.5,
+    punto: '#ef476f',
+    eje: '#dfe7ef',
+    tubo: '#e9eef4',
+    frio: '#118ab2',
+    tibio: '#ffd166',
+    caliente: '#ef476f',
+    ventana: { fondo: '#ffffff', radio: 14, borde: null, sombra: { color: 'rgba(7, 59, 76, 0.18)', x: 0, y: 4, desenfoque: 14 } },
+    fundido: { tipo: 'suave', color: '#eef2f7' },
+    entradaTitulo: 'deslizar',
+    cabecera: true, // número y título de cada paso encima del texto
   },
 };
 
 export class Hud {
   constructor(canvas, estilo) {
     this.tema = TEMAS[estilo.tema];
-    canvas.width = HUD_X * estilo.escalaHud;
-    canvas.height = HUD_Y * estilo.escalaHud;
+    this.escala = estilo.escalaHud;
+    canvas.width = HUD_X * this.escala;
+    canvas.height = HUD_Y * this.escala;
     this.canvas = canvas;
     this.ctx = canvas.getContext('2d');
-    this.ctx.scale(estilo.escalaHud, estilo.escalaHud);
+    this.ctx.scale(this.escala, this.escala);
     this.medidor = document.createElement('canvas').getContext('2d');
     this.cache = new Map();
   }
@@ -163,65 +197,102 @@ export class Hud {
     return lineas;
   }
 
-  // PS1: ventana azul con degradado y marco claro. Cel: bocadillo blanco con sombra de tinta
+  // PS1: ventana azul de RPG. Cel e iso: tarjeta redondeada, con la sombra de su tema
   ventana(x, y, w, h) {
     const ctx = this.ctx;
-    if (!this.tema.pixel) {
-      const radio = Math.min(12, h / 2);
-      ctx.fillStyle = this.tema.linea;
-      ctx.beginPath();
-      ctx.roundRect(x + 4, y + 5, w, h, radio);
-      ctx.fill();
-      ctx.fillStyle = '#fffaf0';
+    const v = this.tema.ventana;
+    if (v === 'rpg') {
+      const g = ctx.createLinearGradient(0, y, 0, y + h);
+      g.addColorStop(0, '#3346b8');
+      g.addColorStop(1, '#0b1052');
+      ctx.fillStyle = '#05061a';
+      ctx.fillRect(x - 3, y - 3, w + 6, h + 6);
+      ctx.fillStyle = '#d8dcf0';
+      ctx.fillRect(x - 2, y - 2, w + 4, h + 4);
+      ctx.fillStyle = '#7d84b0';
+      ctx.fillRect(x, y, w, h);
+      ctx.fillStyle = g;
+      ctx.fillRect(x + 1, y + 1, w - 2, h - 2);
+      return;
+    }
+
+    const radio = Math.min(v.radio, h / 2);
+    const { sombra } = v;
+    if (sombra.desenfoque) {
+      // shadowBlur y shadowOffset van en píxeles reales, no les afecta la escala del lienzo
+      ctx.save();
+      ctx.shadowColor = sombra.color;
+      ctx.shadowBlur = sombra.desenfoque * this.escala;
+      ctx.shadowOffsetX = sombra.x * this.escala;
+      ctx.shadowOffsetY = sombra.y * this.escala;
+      ctx.fillStyle = v.fondo;
       ctx.beginPath();
       ctx.roundRect(x, y, w, h, radio);
       ctx.fill();
-      ctx.lineWidth = 3;
-      ctx.strokeStyle = this.tema.linea;
-      ctx.stroke();
-      return;
+      ctx.restore();
+    } else {
+      ctx.fillStyle = sombra.color;
+      ctx.beginPath();
+      ctx.roundRect(x + sombra.x, y + sombra.y, w, h, radio);
+      ctx.fill();
+      ctx.fillStyle = v.fondo;
+      ctx.beginPath();
+      ctx.roundRect(x, y, w, h, radio);
+      ctx.fill();
     }
-    const g = ctx.createLinearGradient(0, y, 0, y + h);
-    g.addColorStop(0, '#3346b8');
-    g.addColorStop(1, '#0b1052');
-    ctx.fillStyle = '#05061a';
-    ctx.fillRect(x - 3, y - 3, w + 6, h + 6);
-    ctx.fillStyle = '#d8dcf0';
-    ctx.fillRect(x - 2, y - 2, w + 4, h + 4);
-    ctx.fillStyle = '#7d84b0';
-    ctx.fillRect(x, y, w, h);
-    ctx.fillStyle = g;
-    ctx.fillRect(x + 1, y + 1, w - 2, h - 2);
+    if (v.borde) {
+      ctx.lineWidth = v.grosorBorde;
+      ctx.strokeStyle = v.borde;
+      ctx.stroke();
+    }
   }
 
-  // Título de la portada; en cel entra con un pequeño rebote
+  // Título de la portada: fijo (PS1), con rebote (cel) o deslizándose hacia arriba (iso)
   titulo(lineas, local) {
-    let k = 1;
-    if (!this.tema.pixel) {
-      const s = Math.min(1, local / 0.7) - 1;
-      k = 1 + 2.70158 * s ** 3 + 1.70158 * s ** 2;
-    }
     const ctx = this.ctx;
+    const s = Math.min(1, local / 0.7);
     ctx.save();
     ctx.translate(HUD_X / 2, 120);
-    ctx.scale(k, k);
+    if (this.tema.entradaTitulo === 'rebote') {
+      const k = 1 + 2.70158 * (s - 1) ** 3 + 1.70158 * (s - 1) ** 2;
+      ctx.scale(k, k);
+    } else if (this.tema.entradaTitulo === 'deslizar') {
+      ctx.globalAlpha = s;
+      ctx.translate(0, (1 - s) ** 2 * 30);
+    }
     lineas.forEach((linea, i) => {
       this.texto(linea, 0, -28 + i * 42, { tam: 34, color: 'titulo', grosor: 2, alinear: 'center', contorno: true });
     });
     ctx.restore();
   }
 
-  // Cuadro de diálogo con efecto máquina de escribir
-  dialogo(texto, local, { y = 360, alto = 108 } = {}) {
+  // Cuadro de diálogo con efecto máquina de escribir (en iso, con número y título del paso)
+  dialogo(texto, local, { numero, titulo } = {}) {
+    const cabecera = this.tema.cabecera && titulo;
     const x = 16;
+    const y = cabecera ? 344 : 360;
     const w = HUD_X - 32;
+    const alto = cabecera ? 124 : 108;
     this.ventana(x, y, w, alto);
+
+    let yTexto = y + 14;
+    if (cabecera) {
+      const ctx = this.ctx;
+      ctx.fillStyle = this.tema.acento;
+      ctx.beginPath();
+      ctx.arc(x + 30, y + 24, 12, 0, Math.PI * 2);
+      ctx.fill();
+      this.texto(String(numero), x + 30, y + 16, { tam: 14, alinear: 'center', color: '#ffffff' });
+      this.texto(titulo.toUpperCase(), x + 50, y + 16, { tam: 14, color: 'acento' });
+      yTexto = y + 46;
+    }
+
     const lineas = this.partirLineas(texto, w - 36);
     let quedan = Math.max(0, Math.floor((local - RETRASO_TEXTO) * LETRAS_POR_SEGUNDO));
     lineas.forEach((linea, i) => {
       const visible = linea.slice(0, Math.max(0, quedan));
       quedan -= linea.length + 1;
-      this.texto(visible, x + 18, y + 14 + i * 22);
+      this.texto(visible, x + 18, yTexto + i * 22);
     });
     if (quedan > 0 && Math.floor(local * 2.5) % 2 === 0) {
       this.texto('▼', x + w - 26, y + alto - 24, { color: 'acento' });
@@ -238,7 +309,7 @@ export class Hud {
     const ty = py + dy;
     const ctx = this.ctx;
     ctx.strokeStyle = this.tema.linea;
-    ctx.lineWidth = this.tema.pixel ? 2 : 3;
+    ctx.lineWidth = this.tema.grosorLinea;
     ctx.beginPath();
     ctx.moveTo(px, py);
     ctx.lineTo(tx, ty);
@@ -317,7 +388,7 @@ export class Hud {
       ctx.beginPath();
       ctx.roundRect(x + 20, y + 20, 12, alto + 4, 6);
       ctx.fill();
-      ctx.stroke();
+      if (this.tema.ventana.borde) ctx.stroke();
       ctx.fillStyle = color;
       ctx.beginPath();
       ctx.roundRect(x + 20, y + 24 + alto - lleno, 12, lleno, 6);
@@ -325,7 +396,7 @@ export class Hud {
       ctx.beginPath();
       ctx.arc(x + 26, y + 28 + alto, 10, 0, Math.PI * 2);
       ctx.fill();
-      ctx.stroke();
+      if (this.tema.ventana.borde) ctx.stroke();
     }
     this.texto(etiqueta, x + 26, y, { tam: 12, alinear: 'center' });
     this.texto(`${Math.round(grados)}°C`, x + 26, y + alto + 40, { tam: 12, alinear: 'center', color: 'acento' });
@@ -352,20 +423,23 @@ export class Hud {
     ctx.fill();
   }
 
-  // PS1: fundido a negro por escalones. Cel: cierre en círculo, como en los dibujos animados
+  // Transición entre escenas: a negro por escalones (PS1), cierre en círculo (cel) o
+  // fundido suave al color de fondo (iso)
   fundido(negro) {
     if (negro <= 0) return;
     const ctx = this.ctx;
-    if (this.tema.pixel) {
-      ctx.fillStyle = `rgba(0, 0, 0, ${Math.round(negro * 8) / 8})`;
-      ctx.fillRect(0, 0, HUD_X, HUD_Y);
+    const { tipo, color } = this.tema.fundido;
+    ctx.fillStyle = color;
+    if (tipo === 'iris') {
+      const radio = (1 - negro) * Math.hypot(HUD_X, HUD_Y) * 0.5;
+      ctx.beginPath();
+      ctx.rect(0, 0, HUD_X, HUD_Y);
+      ctx.arc(HUD_X / 2, HUD_Y / 2, radio, 0, Math.PI * 2);
+      ctx.fill('evenodd');
       return;
     }
-    const radio = (1 - negro) * Math.hypot(HUD_X, HUD_Y) * 0.5;
-    ctx.fillStyle = this.tema.linea;
-    ctx.beginPath();
-    ctx.rect(0, 0, HUD_X, HUD_Y);
-    ctx.arc(HUD_X / 2, HUD_Y / 2, radio, 0, Math.PI * 2);
-    ctx.fill('evenodd');
+    ctx.globalAlpha = tipo === 'escalones' ? Math.round(negro * 8) / 8 : negro;
+    ctx.fillRect(0, 0, HUD_X, HUD_Y);
+    ctx.globalAlpha = 1;
   }
 }

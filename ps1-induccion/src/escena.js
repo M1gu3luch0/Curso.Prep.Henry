@@ -9,10 +9,15 @@ export const CENTRO = new THREE.Vector3(-0.45, 0, 0.05);
 const OMEGA = Math.PI;
 export const corriente = (t) => Math.sin(OMEGA * t);
 
-// La olla en corte deja abierto el cuarto que mira a la cámara (ángulos de -45° a 45°)
-const CORTE_INI = Math.PI / 4;
+// La olla en corte deja abierto el cuarto que mira a la cámara (de -45° a 45° alrededor de
+// giroCorte, que es 0 salvo en el estilo isométrico)
+let giroCorte = 0;
+let corteIni = Math.PI / 4;
 const CORTE_LEN = Math.PI * 1.5;
-const enHueco = (x, z, margen) => Math.abs(Math.atan2(x, z)) < Math.PI / 4 + margen;
+const enHueco = (x, z, margen) => {
+  const a = Math.atan2(x, z) - giroCorte;
+  return Math.abs(Math.atan2(Math.sin(a), Math.cos(a))) < Math.PI / 4 + margen;
+};
 
 // Perfiles (radio, altura) que se tornean para formar la olla y el agua
 const PERFIL_BASE = [[0, 0], [0.58, 0], [0.62, 0.035], [0.62, 0.06], [0, 0.06]];
@@ -168,12 +173,17 @@ function crearTrazos(grupo, maxSegmentos, renderOrder = 0) {
 }
 
 function crearCocina(scene) {
-  const suelo = malla(repetirUV(new THREE.PlaneGeometry(12, 12, 6, 6), 6, 6), mat({ map: tex.suelo() }), 0, -0.9, 0);
-  suelo.rotation.x = -Math.PI / 2;
-  scene.add(suelo);
+  if (estilo.diorama) {
+    // Infografía: la encimera flota sobre una peana, sin pared ni suelo
+    scene.add(malla(new THREE.BoxGeometry(5.6, 0.1, 2.5), mat({ color: 0xdbe2ec }), 0, -0.95, -0.15));
+  } else {
+    const suelo = malla(repetirUV(new THREE.PlaneGeometry(12, 12, 6, 6), 6, 6), mat({ map: tex.suelo() }), 0, -0.9, 0);
+    suelo.rotation.x = -Math.PI / 2;
+    scene.add(suelo);
 
-  // Muchas subdivisiones: así la deformación del mapeo afín no dobla tanto la pared
-  scene.add(malla(repetirUV(new THREE.PlaneGeometry(10, 5, 24, 12), 10, 5), mat({ map: tex.azulejos() }), 0, 1.6, -1.2));
+    // Muchas subdivisiones: así la deformación del mapeo afín no dobla tanto la pared
+    scene.add(malla(repetirUV(new THREE.PlaneGeometry(10, 5, 24, 12), 10, 5), mat({ map: tex.azulejos() }), 0, 1.6, -1.2));
+  }
 
   // Muebles bajos: dejan hueco para la caja de la placa
   scene.add(malla(repetirUV(new THREE.BoxGeometry(5.2, 0.55, 2.1, 4, 1, 1), 4, 1), mat({ map: tex.mueble() }), 0, -0.625, -0.15));
@@ -239,7 +249,7 @@ function crearPlaca(scene) {
 
 function crearOlla(cortada, mats) {
   const grupo = new THREE.Group();
-  const ini = cortada ? CORTE_INI : 0;
+  const ini = cortada ? corteIni : 0;
   const len = cortada ? CORTE_LEN : Math.PI * 2;
   const segmentos = seg(cortada ? 9 : 12);
   const torno = (perfil) => new THREE.LatheGeometry(perfil.map(([x, y]) => new THREE.Vector2(x, y)), segmentos, ini, len);
@@ -267,9 +277,11 @@ function crearOlla(cortada, mats) {
 
 export function crearMundo(estiloElegido) {
   estilo = estiloElegido;
+  giroCorte = estilo.giroCorte ?? 0;
+  corteIni = giroCorte + Math.PI / 4;
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(estilo.fondo);
-  scene.fog = new THREE.Fog(estilo.fondo, 5, 14);
+  if (estilo.niebla) scene.fog = new THREE.Fog(estilo.fondo, 5, 14);
 
   crearCocina(scene);
   const { vidrio, matVidrio, espiral } = crearPlaca(scene);
@@ -322,7 +334,7 @@ export function crearMundo(estiloElegido) {
   scene.add(grupoCampo);
   const lazos = [];
   for (const phi of ANGULOS_CAMPO) {
-    for (const [ar, ay] of TAMANOS_LAZO) lazos.push({ phi, ar, ay });
+    for (const [ar, ay] of TAMANOS_LAZO) lazos.push({ phi: phi + giroCorte, ar, ay });
   }
   const trazosCampo = crearTrazos(grupoCampo, lazos.length * PUNTOS_LAZO);
   const puntosLazo = Array.from({ length: PUNTOS_LAZO }, () => new THREE.Vector3());
@@ -337,7 +349,7 @@ export function crearMundo(estiloElegido) {
   const trazosFoucault = crearTrazos(grupoFoucault, RADIOS_FOUCAULT.length * PUNTOS_ARCO, 10);
   const arcos = RADIOS_FOUCAULT.map((r) =>
     Array.from({ length: PUNTOS_ARCO + 1 }, (_, i) => {
-      const phi = CORTE_INI + (CORTE_LEN * i) / PUNTOS_ARCO;
+      const phi = corteIni + (CORTE_LEN * i) / PUNTOS_ARCO;
       return new THREE.Vector3(r * Math.sin(phi), 0, r * Math.cos(phi));
     }),
   );
@@ -470,7 +482,7 @@ export function crearMundo(estiloElegido) {
     for (let i = 0; i < BURBUJAS; i++) {
       const azar = Math.sin(i * 91.7) * 0.5 + 0.5;
       const azar2 = Math.sin(i * 47.3 + 1.3) * 0.5 + 0.5;
-      const phi = CORTE_INI + 0.25 + azar * (CORTE_LEN - 0.5);
+      const phi = corteIni + 0.25 + azar * (CORTE_LEN - 0.5);
       const r = Math.sqrt(azar2) * 0.5;
       const f = (t * (0.5 + azar * 0.4) + azar2) % 1;
       const activa = i < BURBUJAS * e.hervor;

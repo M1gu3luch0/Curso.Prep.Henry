@@ -128,11 +128,14 @@ const contornoShader = {
     uniform float grosor;
     uniform float near;
     uniform float far;
+    uniform float ortografica;
     uniform vec3 colorTinta;
+    uniform float fuerza;
     varying vec2 vUv;
 
     float profundidad(vec2 uv) {
-      return -perspectiveDepthToViewZ(texture2D(tDepth, uv).x, near, far);
+      float z = texture2D(tDepth, uv).x;
+      return ortografica > 0.5 ? -orthographicDepthToViewZ(z, near, far) : -perspectiveDepthToViewZ(z, near, far);
     }
 
     vec3 normalEn(vec2 uv) {
@@ -150,12 +153,11 @@ const contornoShader = {
         saltoProfundidad = max(saltoProfundidad, abs(profundidad(uv) - d));
         saltoNormal = max(saltoNormal, 1.0 - dot(normalEn(uv), n));
       }
-      float borde = max(
-        smoothstep(0.03, 0.06, saltoProfundidad / d),
-        smoothstep(0.3, 0.55, saltoNormal)
-      );
+      // En perspectiva el salto se mide relativo a la distancia; en ortográfica, en unidades
+      float relativo = saltoProfundidad / (ortografica > 0.5 ? 1.5 : d);
+      float borde = max(smoothstep(0.03, 0.06, relativo), smoothstep(0.3, 0.55, saltoNormal));
       vec3 c = texture2D(tColor, vUv).rgb;
-      gl_FragColor = vec4(mix(c, colorTinta, borde), 1.0);
+      gl_FragColor = vec4(mix(c, colorTinta, borde * fuerza), 1.0);
       #include <colorspace_fragment>
     }
   `,
@@ -167,7 +169,7 @@ const conContorno = (o) =>
   (o.userData.contornoSiempre || !o.material.transparent || (o.material.uniforms?.opacity?.value ?? 1) >= 0.99);
 
 export class Contornos {
-  constructor(renderer, ancho, alto, { grosor = 1.6, tinta = 0x1d1d2b } = {}) {
+  constructor(renderer, ancho, alto, { grosor = 1.6, tinta = 0x1d1d2b, fuerza = 1 } = {}) {
     this.renderer = renderer;
     // Color con antialiasing (MSAA) y en sRGB para no perder precisión en los oscuros
     this.color = new THREE.WebGLRenderTarget(ancho, alto, { samples: 4 });
@@ -185,7 +187,9 @@ export class Contornos {
         grosor: { value: grosor },
         near: { value: 0.1 },
         far: { value: 100 },
+        ortografica: { value: 0 },
         colorTinta: { value: new THREE.Color(tinta) },
+        fuerza: { value: fuerza },
       },
       depthTest: false,
       depthWrite: false,
@@ -232,6 +236,7 @@ export class Contornos {
     // 3) Composición final: color + tinta
     this.material.uniforms.near.value = camara.near;
     this.material.uniforms.far.value = camara.far;
+    this.material.uniforms.ortografica.value = camara.isOrthographicCamera ? 1 : 0;
     r.setRenderTarget(null);
     r.render(this.escenaFinal, this.camaraFinal);
   }

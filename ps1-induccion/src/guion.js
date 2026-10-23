@@ -26,6 +26,7 @@ export const ESCENAS = [
   {
     id: 'titulo',
     dur: 6,
+    iso: { objetivo: [0.1, -0.3, -0.1], mitad: [2.3, 2.1], centroY: -0.25 },
     estado({ mundo, camara, local }) {
       Object.assign(mundo.estado, { hervor: 0.5, vapor: 0.8 });
       orbita(camara, [-0.3, 0.2, 0], 3, 1.5, 0.55 - local * 0.08);
@@ -40,7 +41,9 @@ export const ESCENAS = [
   },
   {
     id: 'exterior',
+    titulo: 'Por fuera',
     dur: 8,
+    iso: { objetivo: [-0.35, 0.2, 0.05], mitad: [1.35, 1.15] },
     texto: 'Por fuera, un fogón de inducción es solo una placa de vidrio lisa. No hay llama ni resistencias que se pongan al rojo.',
     estado({ camara, local, dur }) {
       travelling(camara, tramo(local, 0, dur), [[1.4, 1.3, 2.4], [0.6, 0.95, 1.8]], [[-0.35, 0.1, 0], [-0.4, 0.05, 0.05]]);
@@ -48,24 +51,30 @@ export const ESCENAS = [
   },
   {
     id: 'despiece',
+    titulo: 'Qué hay dentro',
     dur: 10,
+    iso: { objetivo: [-0.1, 0.7, 0.05], mitad: [1.95, 1.85] },
     texto: 'Si lo desmontamos, bajo el vidrio aparece la pieza clave: una BOBINA de hilo de cobre enrollado en espiral, y la electrónica que la alimenta.',
     estado({ mundo, camara, local, dur }) {
       const k = tramo(local, 0.5, 3);
       Object.assign(mundo.estado, { altoVidrio: 0.6 * k, altoOlla: 1.15 * k });
       travelling(camara, tramo(local, 0, dur), [[1.5, 1.7, 3.5], [1.2, 1.55, 3.3]], [[-0.15, 0.62, 0], [-0.15, 0.62, 0]]);
     },
-    hud({ hud, mundo, camara, local }) {
+    hud({ hud, mundo, camara, local, estilo }) {
       const a = mundo.anclas;
+      // En la vista isométrica el vidrio y la bobina quedan casi a la misma altura
+      const iso = estilo.isometrica;
       hud.etiqueta('OLLA DE ACERO', a.olla, camara, 70, -20, local - 3.2);
-      hud.etiqueta('VIDRIO VITROCERÁMICO', a.vidrio, camara, -40, -40, local - 3.8);
-      hud.etiqueta('BOBINA DE COBRE', a.bobina, camara, -60, -45, local - 4.4);
-      hud.etiqueta('ELECTRÓNICA', a.electronica, camara, 60, -80, local - 5);
+      hud.etiqueta('VIDRIO VITROCERÁMICO', a.vidrio, camara, iso ? 50 : -40, iso ? -45 : -40, local - 3.8);
+      hud.etiqueta('BOBINA DE COBRE', a.bobina, camara, iso ? -70 : -60, iso ? -20 : -45, local - 4.4);
+      hud.etiqueta('ELECTRÓNICA', a.electronica, camara, 60, iso ? -55 : -80, local - 5);
     },
   },
   {
     id: 'corriente',
+    titulo: 'Corriente alterna',
     dur: 10,
+    iso: { objetivo: [-0.45, -0.04, 0.05], mitad: [0.95, 0.85] },
     texto: 'La electrónica envía a la bobina corriente ALTERNA de alta frecuencia: cambia de sentido entre 20.000 y 100.000 veces por segundo. (Aquí, a cámara MUY lenta.)',
     estado({ mundo, camara, local, dur }) {
       Object.assign(mundo.estado, { olla: 'corte', altoOlla: 1.8, rayosX: 1, corriente: tramo(local, 0.3, 1.2) });
@@ -77,7 +86,9 @@ export const ESCENAS = [
   },
   {
     id: 'campo',
+    titulo: 'Campo magnético',
     dur: 10,
+    iso: { objetivo: [-0.45, 0.12, 0.05], mitad: [0.95, 1.05] },
     texto: 'Esa corriente crea un CAMPO MAGNÉTICO que también cambia de sentido sin parar. El vidrio no lo frena: lo atraviesa y llega al fondo de la olla.',
     estado({ mundo, camara, local, dur }) {
       const alto = 1.6 * (1 - tramo(local, 3, 5.5));
@@ -99,7 +110,9 @@ export const ESCENAS = [
   },
   {
     id: 'foucault',
+    titulo: 'Corrientes inducidas',
     dur: 10,
+    iso: { objetivo: [-0.45, 0.1, 0.05], mitad: [0.95, 0.9] },
     texto: 'En el fondo de acero, ese campo variable INDUCE corrientes en remolino (de Foucault). El metal se resiste a ellas... y se CALIENTA.',
     estado({ mundo, camara, local, dur }) {
       Object.assign(mundo.estado, {
@@ -120,7 +133,9 @@ export const ESCENAS = [
   },
   {
     id: 'hervir',
+    titulo: 'El calor nace en la olla',
     dur: 9,
+    iso: { objetivo: [-0.45, 0.35, 0.05], mitad: [1.05, 1] },
     texto: 'El calor nace dentro del propio fondo de la olla y pasa directo al agua. El vidrio solo se calienta por el contacto con la olla.',
     estado({ mundo, camara, local }) {
       Object.assign(mundo.estado, {
@@ -142,7 +157,9 @@ export const ESCENAS = [
   },
   {
     id: 'vidrio',
+    titulo: 'Olla de vidrio',
     dur: 10,
+    iso: { objetivo: [-0.45, 0.2, 0.05], mitad: [1.05, 1] },
     texto: 'Con una olla de vidrio (o de aluminio) no pasa nada: hace falta un fondo FERROMAGNÉTICO, de hierro o acero. Truco: si un imán se pega a la base, sirve.',
     estado({ mundo, camara, local, dur }) {
       Object.assign(mundo.estado, { olla: 'vidrio', rayosX: 1, corriente: 1, campo: 1, alturaCampo: 1.6, captura: 0 });
@@ -159,7 +176,9 @@ export const ESCENAS = [
   },
   {
     id: 'resumen',
+    titulo: 'Resumen',
     dur: 11,
+    iso: { objetivo: [-0.25, 0.25, 0], mitad: [1.5, 1.4], centroY: 0.12 },
     texto: 'Por eso la inducción calienta tan rápido: el calor se genera directamente en la olla, no en la placa.',
     estado({ mundo, camara, local }) {
       Object.assign(mundo.estado, {
