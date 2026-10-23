@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Fogón de inducción · demo PS1</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: #000;
+      }
+      body {
+        display: grid;
+        place-items: center;
+      }
+      #pantalla {
+        width: min(100vw, 133.33vh);
+        aspect-ratio: 4 / 3;
+        image-rendering: pixelated;
+        cursor: pointer;
+      }
+    </style>
+    <script type="importmap">
+      { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js" } }
+    </script>
+  </head>
+  <body>
+    <canvas id="pantalla" title="Clic para volver a empezar"></canvas>
+    <script type="module" src="./src/main.js"></script>
+  </body>
+</html>
